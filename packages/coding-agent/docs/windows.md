@@ -11,7 +11,7 @@ irm https://app.primeintellect.ai/prime-agent/install.ps1 | iex
 The installer verifies the release SHA-256 checksum before invoking npm. At runtime, Prime Agent resolves bash in these locations (in order):
 
 1. Custom path from `~/.prime/agent/settings.json`
-2. Git Bash (`C:\Program Files\Git\bin\bash.exe`)
+2. Git Bash (`C:\Program Files\Git\bin\bash.exe` or `%LOCALAPPDATA%\Programs\Git\bin\bash.exe`)
 3. `bash.exe` on PATH for foreground sessions
 
 After installation, run `prime-agent` from PowerShell, Windows Terminal, or Git Bash. Prime Agent uses the detected bash executable for model-generated shell commands. In daemon workers, Git for Windows resolves from the public `bin\\bash.exe` path to the direct `usr\\bin\\bash.exe` executable so process isolation is applied before Bash creates descendants.

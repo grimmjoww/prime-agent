@@ -1,11 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { getProcessStartId } from "../src/core/session-lease.js";
 import { signalProcessGroupOrProcess } from "../src/utils/child-process.js";
+import { getDirectWindowsBashPath } from "../src/utils/shell.js";
 
 const workerPath = resolve(__dirname, "fixtures/windows-job-worker.ts");
 const tsxPreflightPath = resolve(__dirname, "../../../node_modules/tsx/dist/preflight.cjs");
@@ -94,6 +95,18 @@ async function removeDirectory(path: string): Promise<void> {
 }
 
 describe.skipIf(process.platform !== "win32")("Windows daemon worker Job Object", () => {
+	it("rejects a non-Git bash executable for daemon isolation", () => {
+		const root = mkdtempSync(join(tmpdir(), "prime-agent-unsupported-bash-"));
+		try {
+			const shellPath = join(root, "usr", "bin", "bash.exe");
+			mkdirSync(join(root, "usr", "bin"), { recursive: true });
+			writeFileSync(shellPath, "not git bash");
+			expect(() => getDirectWindowsBashPath(shellPath)).toThrow("requires Git for Windows");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it("kills an assigned Bash leaf when its owner exits while the no-Job control survives", async () => {
 		const root = mkdtempSync(join(tmpdir(), "prime-agent-job-causality-"));
 		const tracked = new Map<number, string | undefined>();

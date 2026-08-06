@@ -10,16 +10,24 @@ export interface ShellConfig {
 	args: string[];
 }
 
+function gitForWindowsRoot(shellPath: string): string | undefined {
+	const normalized = shellPath.replaceAll("\\", "/").toLowerCase();
+	const root = normalized.endsWith("/usr/bin/bash.exe")
+		? dirname(dirname(dirname(shellPath)))
+		: normalized.endsWith("/bin/bash.exe")
+			? dirname(dirname(shellPath))
+			: undefined;
+	if (!root || !existsSync(join(root, "cmd", "git.exe")) || !existsSync(join(root, "usr", "bin", "bash.exe"))) {
+		return undefined;
+	}
+	return root;
+}
+
 export function getDirectWindowsBashPath(shellPath: string): string {
 	if (process.platform !== "win32") return shellPath;
-	if (shellPath.replaceAll("\\", "/").toLowerCase().endsWith("/usr/bin/bash.exe") && existsSync(shellPath)) {
-		return shellPath;
-	}
-	const directPath = join(dirname(dirname(shellPath)), "usr", "bin", "bash.exe");
-	if (!existsSync(directPath)) {
-		throw new Error("Windows daemon process isolation requires Git for Windows bash.exe");
-	}
-	return directPath;
+	const gitRoot = gitForWindowsRoot(shellPath);
+	if (!gitRoot) throw new Error("Windows daemon process isolation requires Git for Windows bash.exe");
+	return join(gitRoot, "usr", "bin", "bash.exe");
 }
 
 /**
@@ -29,7 +37,7 @@ function findBashOnPath(): string | null {
 	if (process.platform === "win32") {
 		// Windows: Use 'where' and verify file exists (where can return non-existent paths)
 		try {
-			const result = spawnSync("where", ["bash.exe"], { encoding: "utf-8", timeout: 5000 });
+			const result = spawnSync("where", ["bash.exe"], { encoding: "utf-8", timeout: 5000, windowsHide: true });
 			if (result.status === 0 && result.stdout) {
 				const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
 				if (firstMatch && existsSync(firstMatch)) {
@@ -44,7 +52,7 @@ function findBashOnPath(): string | null {
 
 	// Unix: Use 'which' and trust its output (handles Termux and special filesystems)
 	try {
-		const result = spawnSync("which", ["bash"], { encoding: "utf-8", timeout: 5000 });
+		const result = spawnSync("which", ["bash"], { encoding: "utf-8", timeout: 5000, windowsHide: true });
 		if (result.status === 0 && result.stdout) {
 			const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
 			if (firstMatch) {
@@ -83,6 +91,10 @@ export function getShellConfig(customShellPath?: string): ShellConfig {
 		const programFilesX86 = process.env["ProgramFiles(x86)"];
 		if (programFilesX86) {
 			paths.push(`${programFilesX86}\\Git\\bin\\bash.exe`);
+		}
+		const localAppData = process.env.LOCALAPPDATA;
+		if (localAppData) {
+			paths.push(`${localAppData}\\Programs\\Git\\bin\\bash.exe`);
 		}
 
 		for (const path of paths) {
