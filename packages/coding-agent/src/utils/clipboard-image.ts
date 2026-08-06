@@ -83,6 +83,7 @@ function runCommand(
 		timeout: timeoutMs,
 		maxBuffer: maxBufferBytes,
 		env: options?.env,
+		windowsHide: true,
 	});
 
 	if (result.error) {

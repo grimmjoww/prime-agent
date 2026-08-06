@@ -125,7 +125,8 @@ describe("readClipboardImage", () => {
 			}
 
 			if (command === "powershell.exe") {
-				const spawnOptions = options as { env?: NodeJS.ProcessEnv };
+				const spawnOptions = options as { env?: NodeJS.ProcessEnv; windowsHide?: boolean };
+				expect(spawnOptions.windowsHide).toBe(true);
 				expect(spawnOptions.env?.PI_WSL_CLIPBOARD_IMAGE_PATH).toBeUndefined();
 				expect(args[2]).toContain("$path = 'C:\\Users\\O''Hare\\clip.png'");
 				if (!tmpFile) {
