@@ -237,11 +237,14 @@ jobs:
           const baseUrl = process.env.INSTALL_BASE_URL;
           if (!baseUrl) throw new Error("INSTALL_BASE_URL is required");
           const installer = fs.readFileSync("install.sh", "utf8");
-          const renderInstaller = (channel) => installer
+          const windowsInstaller = fs.readFileSync("install.ps1", "utf8");
+          const renderInstaller = (source, channel) => source
             .replaceAll("__PRIME_AGENT_DOWNLOAD_BASE_URL__", baseUrl)
             .replaceAll("__PRIME_AGENT_DEFAULT_RELEASE_CHANNEL__", channel);
-          fs.writeFileSync("/tmp/prime-agent-install.sh", renderInstaller("stable"));
-          fs.writeFileSync("/tmp/prime-agent-install-beta.sh", renderInstaller("beta"));
+          fs.writeFileSync("/tmp/prime-agent-install.sh", renderInstaller(installer, "stable"));
+          fs.writeFileSync("/tmp/prime-agent-install-beta.sh", renderInstaller(installer, "beta"));
+          fs.writeFileSync("/tmp/prime-agent-install.ps1", renderInstaller(windowsInstaller, "stable"));
+          fs.writeFileSync("/tmp/prime-agent-install-beta.ps1", renderInstaller(windowsInstaller, "beta"));
           NODE
 
       - name: Extract production release notes
@@ -296,6 +299,16 @@ jobs:
           aws s3 cp /tmp/prime-agent-install-beta.sh "s3://${R2_BUCKET}/install-beta.sh" \
             --endpoint-url "$R2_ENDPOINT_URL" \
             --content-type text/x-shellscript \
+            --cache-control no-cache
+
+          aws s3 cp /tmp/prime-agent-install.ps1 "s3://${R2_BUCKET}/install.ps1" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --content-type text/plain \
+            --cache-control no-cache
+
+          aws s3 cp /tmp/prime-agent-install-beta.ps1 "s3://${R2_BUCKET}/install-beta.ps1" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --content-type text/plain \
             --cache-control no-cache
 
       - name: Create production GitHub release
@@ -379,6 +392,16 @@ jobs:
             --content-type text/x-shellscript \
             --cache-control no-cache
 
+          aws s3 cp /tmp/prime-agent-install.ps1 "s3://${R2_BUCKET}/install.ps1" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --content-type text/plain \
+            --cache-control no-cache
+
+          aws s3 cp /tmp/prime-agent-install-beta.ps1 "s3://${R2_BUCKET}/install-beta.ps1" \
+            --endpoint-url "$R2_ENDPOINT_URL" \
+            --content-type text/plain \
+            --cache-control no-cache
+
           printf 'Automated beta build from `%s` (`%s`).\n' "$DEFAULT_BRANCH" "$BUILD_REF" > /tmp/beta-release-notes.md
 
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/beta" >/dev/null 2>&1; then
@@ -409,4 +432,4 @@ jobs:
           fi
 
           gh release upload beta "$BETA_DIR"/* --clobber
-          echo "Beta installer: ${R2_PUBLIC_BASE_URL%/}/install-beta.sh"
+          echo "Beta installers: ${R2_PUBLIC_BASE_URL%/}/install-beta.sh and ${R2_PUBLIC_BASE_URL%/}/install-beta.ps1"

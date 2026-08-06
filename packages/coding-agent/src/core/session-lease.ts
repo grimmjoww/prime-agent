@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { lockSync } from "proper-lockfile";
+import { getWindowsProcessStartTicks } from "../utils/windows-job-object.js";
 
 export const SESSION_LEASES_ENABLED_ENV = "PRIME_AGENT_INTERNAL_SESSION_LEASES";
 export const SESSION_LEASE_OWNER_ID_ENV = "PRIME_AGENT_INTERNAL_SESSION_LEASE_OWNER_ID";
@@ -110,8 +111,6 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
-type ProcessQuery = (command: string, args: string[]) => string;
-
 function runProcessQuery(command: string, args: string[]): string {
 	return execFileSync(command, args, {
 		encoding: "utf8",
@@ -119,19 +118,18 @@ function runProcessQuery(command: string, args: string[]): string {
 	});
 }
 
-export function getWindowsProcessStartId(pid: number, query: ProcessQuery = runProcessQuery): string | undefined {
+type WindowsProcessStartQuery = (pid: number) => bigint | undefined;
+
+export function getWindowsProcessStartId(
+	pid: number,
+	query: WindowsProcessStartQuery = getWindowsProcessStartTicks,
+): string | undefined {
 	if (!Number.isInteger(pid) || pid <= 0) {
 		return undefined;
 	}
 	try {
-		const startTicks = query("powershell.exe", [
-			"-NoLogo",
-			"-NoProfile",
-			"-NonInteractive",
-			"-Command",
-			`([System.Diagnostics.Process]::GetProcessById(${pid})).StartTime.ToUniversalTime().Ticks`,
-		]).trim();
-		return /^\d+$/.test(startTicks) ? `win:${startTicks}` : undefined;
+		const startTicks = query(pid);
+		return typeof startTicks === "bigint" && startTicks > 0n ? `win:${startTicks}` : undefined;
 	} catch {
 		return undefined;
 	}
@@ -265,7 +263,12 @@ export function acquireSessionLease(
 			} catch (error) {
 				rmSync(candidateDirectory, { recursive: true, force: true });
 				const code = (error as NodeJS.ErrnoException).code;
-				if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+				const destinationExists = existsSync(directory);
+				if (
+					code !== "EEXIST" &&
+					code !== "ENOTEMPTY" &&
+					!(process.platform === "win32" && code === "EPERM" && destinationExists)
+				) {
 					throw error;
 				}
 				const existingOwner = readLeaseOwner(directory);

@@ -30,6 +30,7 @@ import {
 	SESSION_SCHEDULED_JOBS_FILENAME,
 } from "../../core/cron-jobs.js";
 import {
+	type ActiveOrphanProcess,
 	clearOrphanProcessJournal,
 	isOrphanProcessIdentityCurrent,
 	ORPHAN_PROCESS_JOURNAL_ENV,
@@ -44,7 +45,12 @@ import {
 import { canonicalSessionPath, getProcessStartId, SessionAlreadyActiveError } from "../../core/session-lease.js";
 import { getSessionArtifactPathForFile, readSessionInfo, type SessionInfo } from "../../core/session-manager.js";
 import { SettingsManager } from "../../core/settings-manager.js";
-import { isProcessAlive, processIdExists, signalProcessGroupOrProcess } from "../../utils/child-process.js";
+import {
+	isProcessAlive,
+	processIdExists,
+	signalProcessGroupOrProcess,
+	signalProcessTree,
+} from "../../utils/child-process.js";
 import type { AgentConnectionHeartbeat } from "../agent-connection/types.js";
 import { attachJsonlLineReader, serializeJsonLine } from "../rpc/jsonl.js";
 import type { PrivateFrame } from "../session-worker/private-framing.js";
@@ -2195,6 +2201,7 @@ export class DaemonSupervisor {
 		delete workerEnvironment.RLM_DEPTH;
 		await this.assertRecoveryAllowed();
 		const child: ChildProcess = spawn(launch.command, launch.args, {
+			windowsHide: true,
 			cwd: createCommand.config?.cwd ?? process.cwd(),
 			detached: true,
 			env: workerEnvironment,
@@ -2790,6 +2797,26 @@ export class DaemonSupervisor {
 		}
 	}
 
+	private async reapOrphanProcesses(orphanProcesses: readonly ActiveOrphanProcess[]): Promise<boolean> {
+		if (process.platform === "win32") {
+			const deadline = Date.now() + 5000;
+			let remaining = orphanProcesses.filter(isOrphanProcessIdentityCurrent);
+			while (remaining.length > 0 && Date.now() < deadline) {
+				await delay(25);
+				remaining = remaining.filter(isOrphanProcessIdentityCurrent);
+			}
+			return remaining.length === 0;
+		}
+		let complete = true;
+		for (const orphan of orphanProcesses) {
+			if (!isOrphanProcessIdentityCurrent(orphan)) continue;
+			if (!signalProcessTree(orphan.pid, "SIGKILL") && isOrphanProcessIdentityCurrent(orphan)) {
+				complete = false;
+			}
+		}
+		return complete;
+	}
+
 	private async recoverWorker(worker: ResidentWorker): Promise<void> {
 		if (this.isWorkerRecoveryCancelled(worker)) {
 			return;
@@ -2908,29 +2935,26 @@ export class DaemonSupervisor {
 	private async recoverUncertainWorkerOperations(worker: ResidentWorker, killWorkerProcess = true): Promise<void> {
 		await this.assertRecoveryAllowed();
 		if (killWorkerProcess) {
-			signalProcessGroupOrProcess(worker.descriptor.pid, "SIGKILL");
+			const signaled = signalProcessGroupOrProcess(worker.descriptor.pid, "SIGKILL");
+			if (
+				!signaled &&
+				worker.descriptor.processStartId &&
+				getProcessStartId(worker.descriptor.pid) === worker.descriptor.processStartId
+			) {
+				throw new Error(`Could not terminate session worker ${worker.descriptor.pid}`);
+			}
 		}
 		const orphanProcessJournalPath = worker.descriptor.orphanProcessJournalPath;
 		if (orphanProcessJournalPath) {
 			try {
-				for (const orphan of readActiveOrphanProcesses(orphanProcessJournalPath, worker.descriptor.pid)) {
-					if (!isOrphanProcessIdentityCurrent(orphan)) {
-						continue;
-					}
-					const { pid } = orphan;
-					try {
-						process.kill(-pid, "SIGKILL");
-					} catch {
-						try {
-							process.kill(pid, "SIGKILL");
-						} catch {
-							// The detached resource may already have exited.
-						}
-					}
+				const orphanProcesses = readActiveOrphanProcesses(orphanProcessJournalPath, worker.descriptor.pid);
+				if (!(await this.reapOrphanProcesses(orphanProcesses))) {
+					throw new Error("One or more orphaned process trees could not be terminated");
 				}
 				clearOrphanProcessJournal(orphanProcessJournalPath);
 			} catch (error) {
 				this.log(`Could not reap orphaned worker resources: ${String(error)}`);
+				throw error;
 			}
 		}
 		const journal = new WorkerRecoveryJournal(worker.descriptor.recoveryJournalPath);
@@ -5227,6 +5251,7 @@ export class DaemonSupervisor {
 			delete environment[SESSION_LEASES_ENABLED_ENV];
 			delete environment[SESSION_LEASE_OWNER_ID_ENV];
 			const replacement = spawn(launch.command, launch.args, {
+				windowsHide: true,
 				cwd: this.defaultSessionConfig.cwd ?? process.cwd(),
 				detached: true,
 				env: environment,

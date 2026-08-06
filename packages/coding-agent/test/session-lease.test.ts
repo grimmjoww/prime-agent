@@ -1,7 +1,11 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type * as Koffi from "koffi";
 import { lockSync } from "proper-lockfile";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -27,6 +31,22 @@ function createTempDir(): string {
 	return directory;
 }
 
+function retainWindowsProcessHandle(pid: number): () => void {
+	const koffi = createRequire(import.meta.url)("koffi") as typeof Koffi;
+	const kernel32 = koffi.load("kernel32.dll");
+	const openProcess = kernel32.func("void* __stdcall OpenProcess(uint32_t, bool, uint32_t)") as (
+		access: number,
+		inheritHandle: boolean,
+		processId: number,
+	) => unknown;
+	const closeHandle = kernel32.func("bool __stdcall CloseHandle(void*)") as (handle: unknown) => boolean;
+	const handle = openProcess(0x1000, false, pid);
+	if (!handle) throw new Error(`Could not retain process ${pid} for test`);
+	return () => {
+		if (!closeHandle(handle)) throw new Error(`Could not close retained process ${pid}`);
+	};
+}
+
 function enabledEnvironment(owner: string): NodeJS.ProcessEnv {
 	return {
 		[SESSION_LEASES_ENABLED_ENV]: "1",
@@ -35,39 +55,46 @@ function enabledEnvironment(owner: string): NodeJS.ProcessEnv {
 }
 
 describe("session leases", () => {
-	it("reads an invariant process start identity on Windows", () => {
-		const calls: Array<{ command: string; args: string[] }> = [];
-		const processStartId = getWindowsProcessStartId(42, (command, args) => {
-			calls.push({ command, args });
-			return "638880485801234567\r\n";
+	it("reads a Windows process start identity without launching a shell", () => {
+		const queriedPids: number[] = [];
+		const processStartId = getWindowsProcessStartId(42, (pid) => {
+			queriedPids.push(pid);
+			return 638880485801234567n;
 		});
 
 		expect(processStartId).toBe("win:638880485801234567");
-		expect(calls).toEqual([
-			{
-				command: "powershell.exe",
-				args: [
-					"-NoLogo",
-					"-NoProfile",
-					"-NonInteractive",
-					"-Command",
-					"([System.Diagnostics.Process]::GetProcessById(42)).StartTime.ToUniversalTime().Ticks",
-				],
-			},
-		]);
+		expect(queriedPids).toEqual([42]);
 	});
 
-	it("rejects invalid Windows process start identities", () => {
+	it("rejects unavailable and invalid Windows process start identities", () => {
 		let queryCount = 0;
 		const query = () => {
 			queryCount++;
-			return "not-a-start-time";
+			return undefined;
 		};
 
 		expect(getWindowsProcessStartId(42, query)).toBeUndefined();
 		expect(getWindowsProcessStartId(0, query)).toBeUndefined();
 		expect(queryCount).toBe(1);
 	});
+
+	it.skipIf(process.platform !== "win32")(
+		"rejects an exited Windows process whose object is still retained",
+		async () => {
+			const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 100)"], {
+				stdio: "ignore",
+				windowsHide: true,
+			});
+			if (!child.pid) throw new Error("Could not obtain child pid");
+			const release = retainWindowsProcessHandle(child.pid);
+			try {
+				await once(child, "exit");
+				expect(getWindowsProcessStartId(child.pid)).toBeUndefined();
+			} finally {
+				release();
+			}
+		},
+	);
 
 	it("rejects a second live owner with a typed active-session error", () => {
 		const agentDir = createTempDir();
@@ -146,10 +173,13 @@ describe("session leases", () => {
 
 	it("treats symlink aliases as the same persisted session", () => {
 		const agentDir = createTempDir();
-		const sessionPath = join(agentDir, "session.jsonl");
-		const aliasPath = join(agentDir, "session-alias.jsonl");
+		const sessionDir = join(agentDir, "sessions");
+		const aliasDir = join(agentDir, "sessions-alias");
+		const sessionPath = join(sessionDir, "session.jsonl");
+		const aliasPath = join(aliasDir, "session.jsonl");
+		mkdirSync(sessionDir);
 		writeFileSync(sessionPath, "");
-		symlinkSync(sessionPath, aliasPath);
+		symlinkSync(sessionDir, aliasDir, process.platform === "win32" ? "junction" : "dir");
 		const first = acquireSessionLease(sessionPath, agentDir, enabledEnvironment("resident-a"));
 
 		expect(() => acquireSessionLease(aliasPath, agentDir, enabledEnvironment("owned-b"))).toThrow(

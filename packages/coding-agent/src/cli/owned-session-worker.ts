@@ -344,6 +344,7 @@ export async function runOwnedSessionWorkerFrontend(
 			? ["inherit", "inherit", "inherit", "ipc"]
 			: [bridgeStdin ? "pipe" : "inherit", "pipe", "pipe", "ipc"];
 		const child = spawn(launch.command, launch.args, {
+			windowsHide: true,
 			cwd: process.cwd(),
 			detached: process.platform !== "win32",
 			env: {

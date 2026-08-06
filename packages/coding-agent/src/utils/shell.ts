@@ -1,12 +1,25 @@
 import { existsSync } from "node:fs";
-import { delimiter } from "node:path";
-import { spawn, spawnSync } from "child_process";
+import { delimiter, dirname, join } from "node:path";
+import { spawnSync } from "child_process";
 import { getBinDir } from "../config.js";
 import { recordOrphanProcessState } from "../core/orphan-process-journal.js";
+import { signalProcessTree } from "./child-process.js";
 
 export interface ShellConfig {
 	shell: string;
 	args: string[];
+}
+
+export function getDirectWindowsBashPath(shellPath: string): string {
+	if (process.platform !== "win32") return shellPath;
+	if (shellPath.replaceAll("\\", "/").toLowerCase().endsWith("/usr/bin/bash.exe") && existsSync(shellPath)) {
+		return shellPath;
+	}
+	const directPath = join(dirname(dirname(shellPath)), "usr", "bin", "bash.exe");
+	if (!existsSync(directPath)) {
+		throw new Error("Windows daemon process isolation requires Git for Windows bash.exe");
+	}
+	return directPath;
 }
 
 /**
@@ -187,28 +200,6 @@ export function killTrackedDetachedChildren(): void {
 /**
  * Kill a process and all its children (cross-platform)
  */
-export function killProcessTree(pid: number): void {
-	if (process.platform === "win32") {
-		// Use taskkill on Windows to kill process tree
-		try {
-			spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
-				stdio: "ignore",
-				detached: true,
-			});
-		} catch {
-			// Ignore errors if taskkill fails
-		}
-	} else {
-		// Use SIGKILL on Unix/Linux/Mac
-		try {
-			process.kill(-pid, "SIGKILL");
-		} catch {
-			// Fallback to killing just the child if process group kill fails
-			try {
-				process.kill(pid, "SIGKILL");
-			} catch {
-				// Process already dead
-			}
-		}
-	}
+export function killProcessTree(pid: number): boolean {
+	return signalProcessTree(pid, "SIGKILL");
 }

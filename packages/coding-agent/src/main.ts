@@ -111,6 +111,7 @@ import { shouldRunOnboarding } from "./modes/interactive/onboarding.js";
 import { initTheme, preloadCodeHighlighter, stopThemeWatcher } from "./modes/interactive/theme/theme.js";
 import { handleConfigCommand } from "./package-manager-cli.js";
 import { isLocalPath } from "./utils/paths.js";
+import { initializeWindowsDaemonWorkerJob } from "./utils/windows-job-object.js";
 
 /**
  * Read all content from piped stdin.
@@ -1036,8 +1037,10 @@ export interface MainOptions {
 
 export async function main(args: string[], options?: MainOptions) {
 	resetTimings();
-	if (isDaemonWorkerProcess()) {
+	const daemonWorkerProcess = isDaemonWorkerProcess();
+	if (daemonWorkerProcess) {
 		waitForDaemonWorkerStartupGate();
+		initializeWindowsDaemonWorkerJob();
 	}
 	installFileLogSink();
 	if (isDaemonCatalogProcess()) {
@@ -1316,7 +1319,7 @@ export async function main(args: string[], options?: MainOptions) {
 	// --list-models still takes the full path to print and exit.
 	if (appMode === "daemon" && parsed.listModels === undefined) {
 		printTimings();
-		if (isDaemonWorkerProcess()) {
+		if (daemonWorkerProcess) {
 			await runDaemonMode({
 				socketPath: parsed.daemonSocket,
 				defaultSessionConfig: daemonDefaultSessionConfig,

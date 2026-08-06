@@ -548,6 +548,7 @@ export async function launchDaemonUpdateRestartCoordinator(
 		...(originActiveSessionId ? [DAEMON_UPDATE_RESTART_ORIGIN_FLAG, originActiveSessionId] : []),
 	]);
 	const child = spawn(launch.command, launch.args, {
+		windowsHide: true,
 		cwd: options.cwd ?? process.cwd(),
 		detached: true,
 		env: coordinatorEnvironment(agentDir),

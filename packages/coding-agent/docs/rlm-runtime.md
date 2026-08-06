@@ -76,7 +76,7 @@ The Python side does not call providers or implement an agent loop.
 The kernel is created lazily on first IPython use. Python resolution is:
 
 1. `PRIME_AGENT_KERNEL_PYTHON`, when it can import `ipykernel`;
-2. `~/.prime/agent/kernel-venv/bin/python`, bootstrapped with `uv`; or
+2. `~/.prime/agent/kernel-venv/bin/python` (`Scripts\\python.exe` on Windows), bootstrapped with `uv`; or
 3. the XDG data location when `~/.prime` is not writable.
 
 The managed environment includes Python 3.11, `ipykernel`, and `prime-agent-runtime`. A bootstrap marker detects stale environments.

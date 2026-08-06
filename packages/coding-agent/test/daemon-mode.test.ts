@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -55,6 +55,10 @@ import {
 import type { SessionSummary } from "../src/modes/daemon/daemon-session-list.js";
 import { DAEMON_WORKER_SUPERVISOR_SOCKET_ENV } from "../src/modes/daemon/daemon-worker-protocol.js";
 import { RlmSpawnLedger } from "../src/modes/daemon/rlm-ledger.js";
+
+function testSocketPath(directory: string, name: string): string {
+	return process.platform === "win32" ? `\\\\.\\pipe\\${basename(directory)}-${name}` : join(directory, name);
+}
 
 describe("daemon mode helpers", () => {
 	it("preserves envelope client identity while registering prompt admission", () => {
@@ -502,7 +506,7 @@ describe("daemon mode helpers", () => {
 			const realDir = join(tempDir, "real");
 			const aliasDir = join(tempDir, "alias");
 			mkdirSync(realDir);
-			symlinkSync(realDir, aliasDir, "dir");
+			symlinkSync(realDir, aliasDir, process.platform === "win32" ? "junction" : "dir");
 			const parentPath = join(realDir, "parent.jsonl");
 			writeFileSync(parentPath, "");
 			const daemon = new AgentDaemon(join(tempDir, "daemon.sock"), {
@@ -1502,7 +1506,7 @@ describe("daemon mode helpers", () => {
 
 	it("does not retry supervisor agent-message rejections", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pa-msg-"));
-		const socketPath = join(tempDir, "d.sock");
+		const socketPath = testSocketPath(tempDir, "d.sock");
 		let connectionCount = 0;
 		const server: Server = createServer((socket) => {
 			connectionCount++;
@@ -1577,7 +1581,7 @@ describe("daemon mode helpers", () => {
 
 	it("routes worker-local session renames through the supervisor", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pa-worker-rename-"));
-		const socketPath = join(tempDir, "s");
+		const socketPath = testSocketPath(tempDir, "s");
 		let receivedCommand: Record<string, unknown> | undefined;
 		let releaseResponse: () => void = () => {};
 		const responseGate = new Promise<void>((resolve) => {
@@ -1658,7 +1662,7 @@ describe("daemon mode helpers", () => {
 
 	it("does not retry permanent ambiguity errors from the supervisor", async () => {
 		const tempDir = mkdtempSync(join(tmpdir(), "pa-ambiguous-"));
-		const socketPath = join(tempDir, "s");
+		const socketPath = testSocketPath(tempDir, "s");
 		let requestCount = 0;
 		const server = createServer((socket) => {
 			socket.write(
@@ -2495,7 +2499,7 @@ describe("daemon mode helpers", () => {
 			const realDir = join(tempDir, "real");
 			const aliasDir = join(tempDir, "alias");
 			mkdirSync(realDir);
-			symlinkSync(realDir, aliasDir, "dir");
+			symlinkSync(realDir, aliasDir, process.platform === "win32" ? "junction" : "dir");
 			const daemon = new AgentDaemon("/tmp/prime-agent-family-paths.sock", {
 				defaultSessionConfig: { agentDir: tempDir, cwd: tempDir },
 				createRuntime: vi.fn(),

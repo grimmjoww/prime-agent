@@ -692,6 +692,7 @@ async function runStart(parsed: ParsedDaemonClientCommand): Promise<void> {
 		...sessionArgs.daemonArgs.filter((arg) => arg !== "--background" && arg !== "-d"),
 	];
 	const child = spawn(process.execPath, daemonArgs, {
+		windowsHide: true,
 		cwd: sessionArgs.config?.cwd ?? process.cwd(),
 		detached: true,
 		env: process.env,

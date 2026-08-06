@@ -52,6 +52,13 @@
 
 - Fixed the bundled `websearch` skill description and missing-key guidance omitting the `/login` → **MCP Connections** step required to configure Serper.
 - Fixed `retry_worker` cancelling its own recovery when a stopped session worker left a saved stop marker behind, leaving the session stuck at "Session worker is not connected".
+- Added a checksum-verifying PowerShell installer and Windows CI coverage ([#665](https://github.com/PrimeIntellect-ai/prime-agent/issues/665)).
+- Fixed managed kernel bootstrap using the Windows virtual-environment layout ([#660](https://github.com/PrimeIntellect-ai/prime-agent/issues/660)).
+- Fixed daemon command recovery compaction on platforms without directory fsync support ([#666](https://github.com/PrimeIntellect-ai/prime-agent/issues/666)).
+- Fixed stale session lease recovery on Windows ([#667](https://github.com/PrimeIntellect-ai/prime-agent/issues/667)).
+- Fixed core daemon, kernel, and bash child processes opening visible console windows on Windows ([#668](https://github.com/PrimeIntellect-ai/prime-agent/issues/668)).
+- Fixed repeated PowerShell windows during Windows process tracking by reading process start times through the native Win32 API.
+- Fixed Windows daemon worker crashes leaving Git Bash descendants alive by assigning gated Bash processes to a kill-on-close Job Object.
 
 ## [0.7.0] - 2026-08-05
 

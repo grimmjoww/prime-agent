@@ -464,6 +464,7 @@ async function runSelfUpdate(command: SelfUpdateCommand): Promise<void> {
 		await new Promise<void>((resolve, reject) => {
 			// Windows package managers are commonly .cmd shims. Use the shell so Node can execute them.
 			const child = spawn(step.command, step.args, {
+				windowsHide: true,
 				stdio: "inherit",
 				shell: shouldUseWindowsShell(step.command),
 			});
