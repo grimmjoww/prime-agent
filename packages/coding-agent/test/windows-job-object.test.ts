@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { getProcessStartId } from "../src/core/session-lease.js";
 import { signalProcessGroupOrProcess } from "../src/utils/child-process.js";
-import { getDirectWindowsBashPath } from "../src/utils/shell.js";
+import { getDirectWindowsBashPath, getWindowsGitBashLauncherPath } from "../src/utils/shell.js";
 
 const workerPath = resolve(__dirname, "fixtures/windows-job-worker.ts");
 const tsxPreflightPath = resolve(__dirname, "../../../node_modules/tsx/dist/preflight.cjs");
@@ -102,6 +102,24 @@ describe.skipIf(process.platform !== "win32")("Windows daemon worker Job Object"
 			mkdirSync(join(root, "usr", "bin"), { recursive: true });
 			writeFileSync(shellPath, "not git bash");
 			expect(() => getDirectWindowsBashPath(shellPath)).toThrow("requires Git for Windows");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it("resolves the validated Git for Windows launcher", () => {
+		const root = mkdtempSync(join(tmpdir(), "prime-agent-git-bash-launcher-"));
+		try {
+			const shellPath = join(root, "usr", "bin", "bash.exe");
+			const launcherPath = join(root, "bin", "bash.exe");
+			mkdirSync(join(root, "cmd"), { recursive: true });
+			mkdirSync(join(root, "usr", "bin"), { recursive: true });
+			mkdirSync(join(root, "bin"), { recursive: true });
+			writeFileSync(join(root, "cmd", "git.exe"), "git");
+			writeFileSync(shellPath, "bash");
+			writeFileSync(launcherPath, "launcher");
+
+			expect(getWindowsGitBashLauncherPath(shellPath)).toBe(launcherPath);
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}

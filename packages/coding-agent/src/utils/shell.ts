@@ -30,6 +30,14 @@ export function getDirectWindowsBashPath(shellPath: string): string {
 	return join(gitRoot, "usr", "bin", "bash.exe");
 }
 
+export function getWindowsGitBashLauncherPath(shellPath: string): string {
+	if (process.platform !== "win32") return shellPath;
+	const gitRoot = gitForWindowsRoot(shellPath);
+	const launcher = gitRoot ? join(gitRoot, "bin", "bash.exe") : undefined;
+	if (!launcher || !existsSync(launcher)) throw new Error("Windows shell execution requires Git for Windows bash.exe");
+	return launcher;
+}
+
 /**
  * Find bash executable on PATH (cross-platform)
  */

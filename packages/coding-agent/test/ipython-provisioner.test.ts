@@ -7,6 +7,7 @@ import type { ExtensionContext } from "../src/core/extensions/types.js";
 import type { KernelBootstrapProgressHandler } from "../src/core/kernel/bootstrap.js";
 import { type ExecuteResult, KernelBusyAfterInterruptError, KernelManager } from "../src/core/kernel/index.js";
 import { createIpythonToolDefinition, IpythonKernelProvisioner } from "../src/core/tools/ipython.js";
+import * as shellModule from "../src/utils/shell.js";
 
 let tempDir = "";
 
@@ -261,6 +262,43 @@ describe("IpythonKernelProvisioner", () => {
 			"\n \r\n\t%%script /custom/bash\r\nexport TEST_PREFIX=1\necho body",
 			expect.objectContaining({ signal: undefined, onStream: expect.any(Function) }),
 		);
+	});
+
+	it.runIf(process.platform === "win32")("uses the Git for Windows launcher for bare bash cells", async () => {
+		const execute = vi.fn<KernelManager["execute"]>().mockResolvedValueOnce(okExecuteResult());
+		const manager = { execute } as unknown as KernelManager;
+		const provisioner = {
+			ensure: vi.fn(async () => manager),
+			kill: vi.fn(async () => {}),
+		} as unknown as IpythonKernelProvisioner;
+		const tool = createIpythonToolDefinition(tempDir, { provisioner, shellPath: "   " });
+
+		await tool.execute("tool-call", { code: "%%bash\ncygpath -w /" }, undefined, undefined, {} as ExtensionContext);
+
+		expect(execute).toHaveBeenCalledWith(
+			`%%script "${shellModule.getShellConfig().shell}"\ncygpath -w /`,
+			expect.objectContaining({ signal: undefined, onStream: expect.any(Function) }),
+		);
+	});
+
+	it.runIf(process.platform === "win32")("does not resolve Bash for Python cells", async () => {
+		const execute = vi.fn<KernelManager["execute"]>().mockResolvedValueOnce(okExecuteResult());
+		const manager = { execute } as unknown as KernelManager;
+		const provisioner = {
+			ensure: vi.fn(async () => manager),
+			kill: vi.fn(async () => {}),
+		} as unknown as IpythonKernelProvisioner;
+		const getShellConfig = vi.spyOn(shellModule, "getShellConfig");
+		const tool = createIpythonToolDefinition(tempDir, { provisioner });
+
+		await tool.execute("tool-call", { code: "value = 42" }, undefined, undefined, {} as ExtensionContext);
+
+		expect(getShellConfig).not.toHaveBeenCalled();
+		expect(execute).toHaveBeenCalledWith(
+			"value = 42",
+			expect.objectContaining({ signal: undefined, onStream: expect.any(Function) }),
+		);
+		getShellConfig.mockRestore();
 	});
 
 	it("lets the user wait when an interrupted kernel is still busy", async () => {
