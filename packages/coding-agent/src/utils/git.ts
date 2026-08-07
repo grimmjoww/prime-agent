@@ -252,6 +252,7 @@ function runGit(cwd: string, args: string[]): string | null {
 	const result = spawnSync("git", ["--no-optional-locks", ...args], {
 		cwd,
 		encoding: "utf8",
+		windowsHide: true,
 		stdio: ["ignore", "pipe", "ignore"],
 	});
 	if (result.status !== 0 || typeof result.stdout !== "string") return null;
