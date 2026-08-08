@@ -2709,6 +2709,13 @@ export class DaemonSupervisor {
 		if (process.platform === "win32") {
 			const deadline = Date.now() + 5000;
 			let remaining = orphanProcesses.filter(isOrphanProcessIdentityCurrent);
+			// Journaled orphans are not in the worker's Job Object, so they do not
+			// die with it; they must be signaled explicitly before waiting them out.
+			for (const orphan of remaining) {
+				if (isOrphanProcessIdentityCurrent(orphan)) {
+					signalProcessTree(orphan.pid, "SIGKILL");
+				}
+			}
 			while (remaining.length > 0 && Date.now() < deadline) {
 				await delay(25);
 				remaining = remaining.filter(isOrphanProcessIdentityCurrent);

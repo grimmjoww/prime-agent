@@ -10,6 +10,7 @@
 - Fixed core daemon, kernel, and bash child processes opening visible console windows on Windows ([#668](https://github.com/PrimeIntellect-ai/prime-agent/issues/668)).
 - Fixed repeated PowerShell windows during Windows process tracking by reading process start times through the native Win32 API.
 - Fixed Windows daemon worker crashes leaving Git Bash descendants alive by assigning gated Bash processes to a kill-on-close Job Object.
+- Fixed Windows daemon recovery failing after a worker crash while journaled orphan process trees were still running ([#917](https://github.com/PrimeIntellect-ai/prime-agent/issues/917)).
 
 ## [0.7.0] - 2026-08-05
 
