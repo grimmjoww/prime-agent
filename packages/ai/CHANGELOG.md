@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added MiniMax-M3 to the `minimax` and `minimax-cn` providers with 1M context window and multimodal input.
+
 ## [0.7.0] - 2026-08-05
 
 ## [0.6.1] - 2026-08-05

@@ -1894,12 +1894,14 @@ async function generateModels() {
 		}
 	}
 
-	const minimaxDirectSupportedIds = new Set(["MiniMax-M2.7", "MiniMax-M2.7-highspeed"]);
+	const minimaxDirectSupportedIds = new Set(["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M3"]);
 
+	// MiniMax M2.7 variants need a smaller context window override than what
+	// models.dev declares; M3 keeps its native 1M context window.
 	for (const candidate of allModels) {
 		if (
 			(candidate.provider === "minimax" || candidate.provider === "minimax-cn") &&
-			minimaxDirectSupportedIds.has(candidate.id)
+			(candidate.id === "MiniMax-M2.7" || candidate.id === "MiniMax-M2.7-highspeed")
 		) {
 			candidate.contextWindow = 204800;
 			candidate.maxTokens = 131072;
