@@ -393,6 +393,7 @@ export class DaemonCatalogClient {
 	private async spawnCatalog(): Promise<void> {
 		const launch = createCliSubprocessLaunchSpec(["--version"]);
 		const child = spawn(launch.command, launch.args, {
+			windowsHide: true,
 			cwd: process.cwd(),
 			env: createCliSubprocessEnv({ ...process.env, [DAEMON_CATALOG_ROLE_ENV]: "1" }),
 			stdio: ["ignore", "ignore", "ignore", "ipc"],

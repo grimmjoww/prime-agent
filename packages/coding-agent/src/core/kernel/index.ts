@@ -645,6 +645,7 @@ export class KernelManager {
 
 		if (!forked) {
 			const kernel = spawn(python, ["-m", "ipykernel_launcher", "-f", connection.path], {
+				windowsHide: true,
 				cwd: this.options.cwd,
 				env: this.options.env ? { ...process.env, ...this.options.env } : process.env,
 				stdio: ["ignore", "pipe", "pipe"],

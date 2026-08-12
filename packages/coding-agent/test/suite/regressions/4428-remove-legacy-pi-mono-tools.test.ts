@@ -10,6 +10,7 @@ import { createAgentSession } from "../../../src/core/sdk.js";
 import { SessionManager } from "../../../src/core/session-manager.js";
 import { SettingsManager } from "../../../src/core/settings-manager.js";
 import { allToolNames, createAllToolDefinitions } from "../../../src/core/tools/index.js";
+import { getShellConfig } from "../../../src/utils/shell.js";
 
 describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 	let tempDir: string;
@@ -109,23 +110,26 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 	});
 
 	it("applies shell settings to ipython bash cells", async () => {
-		const shellPath = join(tempDir, "custom-shell.sh");
-		writeFileSync(shellPath, "#!/bin/sh\nprintf 'custom-shell\\n'\nexec /bin/sh \"$@\"\n");
-		chmodSync(shellPath, 0o755);
+		const shellPath = process.platform === "win32" ? getShellConfig().shell : join(tempDir, "custom-shell.sh");
+		if (process.platform !== "win32") {
+			writeFileSync(shellPath, "#!/bin/sh\nprintf 'custom-shell\\n'\nexec /bin/sh \"$@\"\n");
+			chmodSync(shellPath, 0o755);
+		}
 
-		const settingsManager = SettingsManager.create(tempDir, agentDir);
+		const cwd = process.platform === "win32" ? process.cwd() : tempDir;
+		const settingsManager = SettingsManager.create(cwd, agentDir);
 		settingsManager.setShellCommandPrefix("echo prefix-from-settings");
 		settingsManager.setShellPath(shellPath);
-		const sessionManager = SessionManager.inMemory(tempDir);
+		const sessionManager = SessionManager.inMemory(cwd);
 		const resourceLoader = new DefaultResourceLoader({
-			cwd: tempDir,
+			cwd,
 			agentDir,
 			settingsManager,
 		});
 		await resourceLoader.reload();
 
 		const { session } = await createAgentSession({
-			cwd: tempDir,
+			cwd,
 			agentDir,
 			model: getModel("anthropic", "claude-sonnet-5")!,
 			settingsManager,
@@ -145,7 +149,45 @@ describe("regression #4428: remove legacy pi-mono built-in tools", () => {
 				.map((item) => item.text)
 				.join("");
 
-			expect(output).toContain("custom-shell\nprefix-from-settings\nbody");
+			expect(output).toContain(
+				process.platform === "win32" ? "prefix-from-settings\nbody" : "custom-shell\nprefix-from-settings\nbody",
+			);
+		} finally {
+			await session.disposeAsync();
+		}
+	});
+
+	it.runIf(process.platform === "win32")("uses Git Bash for ipython bash cells by default on Windows", async () => {
+		const cwd = process.cwd();
+		const settingsManager = SettingsManager.create(cwd, agentDir);
+		const sessionManager = SessionManager.inMemory(cwd);
+		const resourceLoader = new DefaultResourceLoader({
+			cwd,
+			agentDir,
+			settingsManager,
+		});
+		await resourceLoader.reload();
+
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir,
+			model: getModel("anthropic", "claude-sonnet-5")!,
+			settingsManager,
+			sessionManager,
+			resourceLoader,
+			tools: ["ipython"],
+		});
+
+		try {
+			const ipythonTool = session.agent.state.tools.find((tool) => tool.name === "ipython");
+			expect(ipythonTool).toBeTruthy();
+			const result = await ipythonTool!.execute("tool-1", { code: "%%bash\ncygpath -w /" });
+			const output = result.content
+				.filter((item): item is { type: "text"; text: string } => item.type === "text")
+				.map((item) => item.text)
+				.join("");
+
+			expect(output).toMatch(/Git[\\/]/);
 		} finally {
 			await session.disposeAsync();
 		}

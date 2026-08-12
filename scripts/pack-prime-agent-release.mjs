@@ -213,7 +213,15 @@ function copyPackageContents(sourceDir, targetDir, packageJson) {
 }
 
 function run(command, args, cwd) {
-	const result = spawnSync(command, args, {
+	let npmExecPath = command === "npm" ? process.env.npm_execpath : undefined;
+	if (command === "npm" && process.platform === "win32" && !npmExecPath) {
+		const bundledNpm = join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+		if (!existsSync(bundledNpm)) {
+			throw new Error("Cannot locate npm-cli.js; run this packer through npm run release:pack");
+		}
+		npmExecPath = bundledNpm;
+	}
+	const result = spawnSync(npmExecPath ? process.execPath : command, npmExecPath ? [npmExecPath, ...args] : args, {
 		cwd,
 		stdio: "pipe",
 		encoding: "utf8",
@@ -222,7 +230,8 @@ function run(command, args, cwd) {
 	if (result.status !== 0) {
 		if (result.stdout) process.stdout.write(result.stdout);
 		if (result.stderr) process.stderr.write(result.stderr);
-		throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status}`);
+		const detail = result.error ? `: ${result.error.message}` : "";
+		throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}${detail}`);
 	}
 
 	if (result.stderr) process.stderr.write(result.stderr);

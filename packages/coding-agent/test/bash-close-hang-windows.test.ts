@@ -33,7 +33,7 @@ function cleanupDetachedChild(pidFile: string): void {
 	const pid = Number.parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
 	if (Number.isFinite(pid) && pid > 0) {
 		try {
-			execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore" });
+			execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore", timeout: 5000 });
 		} catch {
 			// Process may have already exited.
 		}
@@ -79,6 +79,18 @@ describe.skipIf(process.platform !== "win32")("Windows child-process close handl
 
 	afterEach(() => {
 		rmSync(testDir, { recursive: true, force: true });
+	});
+
+	it("rejects an already-aborted command without spawning Bash", async () => {
+		const marker = join(testDir, "already-aborted-ran");
+		const command = `node -e "require('fs').writeFileSync(process.argv[1], 'ran')" ${toBashSingleQuotedArg(marker)}`;
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(
+			createLocalBashOperations().exec(command, testDir, { onData: () => {}, signal: controller.signal }),
+		).rejects.toThrow("aborted");
+		expect(existsSync(marker)).toBe(false);
 	});
 
 	it("executeBash resolves after the shell exits even if inherited stdio handles stay open", async () => {

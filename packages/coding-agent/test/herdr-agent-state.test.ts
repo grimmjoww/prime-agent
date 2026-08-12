@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	createHerdrAgentStateExtension,
@@ -13,6 +13,10 @@ import type { ExtensionAPI } from "../src/core/extensions/types.js";
 interface RecordedRequest {
 	method: string;
 	params: Record<string, unknown>;
+}
+
+function testSocketPath(directory: string): string {
+	return process.platform === "win32" ? `\\\\.\\pipe\\herdr-${basename(directory)}` : join(directory, "h.sock");
 }
 
 function createMockPi() {
@@ -183,7 +187,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -222,7 +226,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -281,7 +285,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -305,7 +309,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -337,7 +341,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -380,7 +384,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -419,7 +423,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -452,7 +456,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);
@@ -483,7 +487,7 @@ describe("herdrAgentStateExtension", () => {
 		const tempDir = join(tmpdir(), `hrd-${Math.random().toString(36).slice(2, 8)}`);
 		mkdirSync(tempDir, { recursive: true });
 		cleanupPaths.push(tempDir);
-		const socketPath = join(tempDir, "h.sock");
+		const socketPath = testSocketPath(tempDir);
 
 		const { server, requests, waitForRequests } = await startFakeHerdrServer(socketPath);
 		cleanupServers.push(server);

@@ -9,11 +9,13 @@ import { KernelManager } from "../src/core/kernel/index.js";
 function resolveKernelPython(): string | null {
 	const candidates = [
 		process.env.PRIME_AGENT_KERNEL_PYTHON,
-		join(homedir(), ".prime", "agent", "kernel-venv", "bin", "python"),
+		process.platform === "win32"
+			? join(homedir(), ".prime", "agent", "kernel-venv", "Scripts", "python.exe")
+			: join(homedir(), ".prime", "agent", "kernel-venv", "bin", "python"),
 	].filter((p): p is string => Boolean(p));
 	for (const python of candidates) {
 		if (!existsSync(python)) continue;
-		const check = spawnSync(python, ["-c", "import ipykernel, dill"], { encoding: "utf8" });
+		const check = spawnSync(python, ["-c", "import ipykernel, dill"], { encoding: "utf8", windowsHide: true });
 		if (check.status === 0) return python;
 	}
 	return null;

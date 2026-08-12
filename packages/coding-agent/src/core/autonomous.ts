@@ -492,6 +492,7 @@ function runChildProcess(
 	options.signal?.throwIfAborted();
 	return new Promise((resolve) => {
 		const child = spawn(command, args, {
+			windowsHide: true,
 			cwd: options.cwd,
 			detached: process.platform !== "win32",
 			shell: options.shell === true,

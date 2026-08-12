@@ -182,6 +182,7 @@ import { DaemonSessionSummarizer } from "./daemon-session-summarizer.js";
 import {
 	cleanupDaemonSocketPath,
 	type DaemonSocketIdentity,
+	defaultDaemonSocketDir,
 	defaultDaemonSocketPath,
 	getDaemonSocketIdentity,
 	prepareDaemonSocketPath,
@@ -757,7 +758,11 @@ export class AgentDaemon {
 		}
 		this.supervisorLaunchInProgress = true;
 		const key = createHash("sha256").update(supervisorSocketPath).digest("hex").slice(0, 12);
-		const lockDirectory = join(dirname(supervisorSocketPath), `.supervisor-launch-${key}.lock`);
+		const lockRoot = process.platform === "win32" ? defaultDaemonSocketDir() : dirname(supervisorSocketPath);
+		if (process.platform === "win32") {
+			mkdirSync(lockRoot, { recursive: true, mode: 0o700 });
+		}
+		const lockDirectory = join(lockRoot, `.supervisor-launch-${key}.lock`);
 		let ownsLock = false;
 		try {
 			for (let attempt = 0; attempt < 3 && !ownsLock; attempt++) {
@@ -774,7 +779,11 @@ export class AgentDaemon {
 				} catch (error) {
 					rmSync(candidateDirectory, { recursive: true, force: true });
 					const code = (error as NodeJS.ErrnoException).code;
-					if (code !== "EEXIST" && code !== "ENOTEMPTY") {
+					const collided =
+						code === "EEXIST" ||
+						code === "ENOTEMPTY" ||
+						(process.platform === "win32" && code === "EPERM" && existsSync(lockDirectory));
+					if (!collided) {
 						throw error;
 					}
 					let ownerPid: number | undefined;
@@ -817,6 +826,7 @@ export class AgentDaemon {
 			delete environment[SESSION_LEASES_ENABLED_ENV];
 			delete environment[SESSION_LEASE_OWNER_ID_ENV];
 			const child = spawn(launch.command, launch.args, {
+				windowsHide: true,
 				cwd: this.options.defaultSessionConfig.cwd ?? process.cwd(),
 				detached: true,
 				env: environment,

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	ensureInteractiveDaemonRunning,
@@ -34,13 +34,17 @@ interface FakeDaemon {
 	close: () => Promise<void>;
 }
 
+function testSocketPath(directory: string): string {
+	return process.platform === "win32" ? `\\\\.\\pipe\\${basename(directory)}` : join(directory, "d.sock");
+}
+
 function send(socket: Socket, message: unknown): void {
 	socket.write(`${JSON.stringify(message)}\n`);
 }
 
 async function startFakeDaemon(options: FakeDaemonOptions = {}): Promise<FakeDaemon> {
 	const dir = mkdtempSync(join(tmpdir(), "pa-launch-"));
-	const socketPath = join(dir, "d.sock");
+	const socketPath = testSocketPath(dir);
 	const server: Server = createServer((socket) => {
 		socket.on("error", () => undefined);
 		send(socket, {
@@ -109,7 +113,7 @@ async function startFakeDaemon(options: FakeDaemonOptions = {}): Promise<FakeDae
 
 async function startCrashingDaemon(): Promise<FakeDaemon> {
 	const dir = mkdtempSync(join(tmpdir(), "pa-launch-crash-"));
-	const socketPath = join(dir, "d.sock");
+	const socketPath = testSocketPath(dir);
 	const child = spawn(
 		process.execPath,
 		[
@@ -276,7 +280,7 @@ describe("ensureInteractiveDaemonRunning", () => {
 	it("fails fast with the daemon log tail when the spawned daemon exits during startup", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pa-launch-startup-crash-"));
 		const entrypoint = join(dir, "crash.mjs");
-		const socketPath = join(dir, "d.sock");
+		const socketPath = testSocketPath(dir);
 		const originalAgentDir = process.env[ENV_AGENT_DIR];
 		process.env[ENV_AGENT_DIR] = join(dir, "agent");
 		const logPath = getDaemonLogPath(socketPath);
@@ -303,7 +307,7 @@ describe("ensureInteractiveDaemonRunning", () => {
 	it("names the missing daemon log when the daemon crashes before logging", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pa-launch-startup-silent-"));
 		const entrypoint = join(dir, "crash.mjs");
-		const socketPath = join(dir, "d.sock");
+		const socketPath = testSocketPath(dir);
 		const originalAgentDir = process.env[ENV_AGENT_DIR];
 		process.env[ENV_AGENT_DIR] = join(dir, "agent");
 		writeFileSync(entrypoint, "process.exit(7);");
@@ -324,7 +328,7 @@ describe("ensureInteractiveDaemonRunning", () => {
 
 	it("surfaces a spawn error when the child never emits exit", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pa-launch-spawn-error-"));
-		const socketPath = join(dir, "d.sock");
+		const socketPath = testSocketPath(dir);
 		const originalAgentDir = process.env[ENV_AGENT_DIR];
 		process.env[ENV_AGENT_DIR] = join(dir, "agent");
 
@@ -342,7 +346,7 @@ describe("ensureInteractiveDaemonRunning", () => {
 	it("succeeds when the spawned child loses the race to an already-serving daemon", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pa-launch-startup-race-"));
 		const entrypoint = join(dir, "loser.mjs");
-		const socketPath = join(dir, "d.sock");
+		const socketPath = testSocketPath(dir);
 		const originalAgentDir = process.env[ENV_AGENT_DIR];
 		process.env[ENV_AGENT_DIR] = join(dir, "agent");
 		writeFileSync(entrypoint, "process.exit(7);");
@@ -380,7 +384,7 @@ describe("ensureInteractiveDaemonRunning", () => {
 	it("does not attribute a previous run's log to a daemon that crashed before logging", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "pa-launch-startup-stale-"));
 		const entrypoint = join(dir, "crash.mjs");
-		const socketPath = join(dir, "d.sock");
+		const socketPath = testSocketPath(dir);
 		const originalAgentDir = process.env[ENV_AGENT_DIR];
 		process.env[ENV_AGENT_DIR] = join(dir, "agent");
 		const logPath = getDaemonLogPath(socketPath);

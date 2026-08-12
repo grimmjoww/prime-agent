@@ -208,7 +208,14 @@ export class CommandRecoveryJournal {
 		renameSync(tempPath, this.path);
 		const directoryDescriptor = openSync(dirname(this.path), "r");
 		try {
-			fsyncSync(directoryDescriptor);
+			try {
+				fsyncSync(directoryDescriptor);
+			} catch (error) {
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "EPERM" && code !== "EINVAL" && code !== "ENOTSUP") {
+					throw error;
+				}
+			}
 		} finally {
 			closeSync(directoryDescriptor);
 		}

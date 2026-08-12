@@ -173,6 +173,7 @@ class ForkServer {
 				// The template only imports; its own cwd/env are irrelevant since each
 				// forked child applies the per-kernel cwd/env itself. Inherit the daemon's.
 				const proc = spawn(this.params.python, ["-c", FORK_SERVER_SCRIPT, socketPath], {
+					windowsHide: true,
 					env: this.launchEnv,
 					stdio: ["ignore", "ignore", "pipe"],
 				});

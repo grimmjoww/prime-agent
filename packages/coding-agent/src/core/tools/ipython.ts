@@ -4,6 +4,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import { type Static, Type } from "typebox";
 import { IMAGE_MIME_TYPES } from "../../utils/mime.js";
+import { getShellConfig, getWindowsGitBashLauncherPath } from "../../utils/shell.js";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.js";
 import { withKernelBootPermit } from "../kernel/boot-gate.js";
 import type { KernelBootstrapProgressHandler } from "../kernel/bootstrap.js";
@@ -297,19 +298,23 @@ export interface IpythonToolOptions {
 }
 
 function quoteScriptMagicArgument(value: string): string {
-	return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\"'\"'")}'`;
+	if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
+	return process.platform === "win32" ? `"${value.replaceAll('"', '\\"')}"` : `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
 function applyShellSettingsToBashMagicCell(
 	code: string,
 	options: Pick<IpythonToolOptions, "commandPrefix" | "shellPath"> | undefined,
 ): string {
-	const commandPrefix = options?.commandPrefix;
-	const shellPath = options?.shellPath?.trim();
-	if (!commandPrefix && !shellPath) return code;
-
 	const bashCell = parseIpythonBashCell(code);
 	if (!bashCell) return code;
+
+	const commandPrefix = options?.commandPrefix;
+	const configuredShellPath = options?.shellPath?.trim();
+	const shellPath =
+		configuredShellPath ||
+		(process.platform === "win32" ? getWindowsGitBashLauncherPath(getShellConfig().shell) : undefined);
+	if (!commandPrefix && !shellPath) return code;
 
 	const firstLine =
 		shellPath && bashCell.magicArguments.trim().length === 0

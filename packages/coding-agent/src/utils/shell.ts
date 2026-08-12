@@ -1,12 +1,41 @@
 import { existsSync } from "node:fs";
-import { delimiter } from "node:path";
-import { spawn, spawnSync } from "child_process";
+import { delimiter, dirname, join } from "node:path";
+import { spawnSync } from "child_process";
 import { getBinDir } from "../config.js";
 import { recordOrphanProcessState } from "../core/orphan-process-journal.js";
+import { signalProcessTree } from "./child-process.js";
 
 export interface ShellConfig {
 	shell: string;
 	args: string[];
+}
+
+function gitForWindowsRoot(shellPath: string): string | undefined {
+	const normalized = shellPath.replaceAll("\\", "/").toLowerCase();
+	const root = normalized.endsWith("/usr/bin/bash.exe")
+		? dirname(dirname(dirname(shellPath)))
+		: normalized.endsWith("/bin/bash.exe")
+			? dirname(dirname(shellPath))
+			: undefined;
+	if (!root || !existsSync(join(root, "cmd", "git.exe")) || !existsSync(join(root, "usr", "bin", "bash.exe"))) {
+		return undefined;
+	}
+	return root;
+}
+
+export function getDirectWindowsBashPath(shellPath: string): string {
+	if (process.platform !== "win32") return shellPath;
+	const gitRoot = gitForWindowsRoot(shellPath);
+	if (!gitRoot) throw new Error("Windows daemon process isolation requires Git for Windows bash.exe");
+	return join(gitRoot, "usr", "bin", "bash.exe");
+}
+
+export function getWindowsGitBashLauncherPath(shellPath: string): string {
+	if (process.platform !== "win32") return shellPath;
+	const gitRoot = gitForWindowsRoot(shellPath);
+	const launcher = gitRoot ? join(gitRoot, "bin", "bash.exe") : undefined;
+	if (!launcher || !existsSync(launcher)) throw new Error("Windows shell execution requires Git for Windows bash.exe");
+	return launcher;
 }
 
 /**
@@ -16,7 +45,7 @@ function findBashOnPath(): string | null {
 	if (process.platform === "win32") {
 		// Windows: Use 'where' and verify file exists (where can return non-existent paths)
 		try {
-			const result = spawnSync("where", ["bash.exe"], { encoding: "utf-8", timeout: 5000 });
+			const result = spawnSync("where", ["bash.exe"], { encoding: "utf-8", timeout: 5000, windowsHide: true });
 			if (result.status === 0 && result.stdout) {
 				const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
 				if (firstMatch && existsSync(firstMatch)) {
@@ -31,7 +60,7 @@ function findBashOnPath(): string | null {
 
 	// Unix: Use 'which' and trust its output (handles Termux and special filesystems)
 	try {
-		const result = spawnSync("which", ["bash"], { encoding: "utf-8", timeout: 5000 });
+		const result = spawnSync("which", ["bash"], { encoding: "utf-8", timeout: 5000, windowsHide: true });
 		if (result.status === 0 && result.stdout) {
 			const firstMatch = result.stdout.trim().split(/\r?\n/)[0];
 			if (firstMatch) {
@@ -70,6 +99,10 @@ export function getShellConfig(customShellPath?: string): ShellConfig {
 		const programFilesX86 = process.env["ProgramFiles(x86)"];
 		if (programFilesX86) {
 			paths.push(`${programFilesX86}\\Git\\bin\\bash.exe`);
+		}
+		const localAppData = process.env.LOCALAPPDATA;
+		if (localAppData) {
+			paths.push(`${localAppData}\\Programs\\Git\\bin\\bash.exe`);
 		}
 
 		for (const path of paths) {
@@ -187,28 +220,6 @@ export function killTrackedDetachedChildren(): void {
 /**
  * Kill a process and all its children (cross-platform)
  */
-export function killProcessTree(pid: number): void {
-	if (process.platform === "win32") {
-		// Use taskkill on Windows to kill process tree
-		try {
-			spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
-				stdio: "ignore",
-				detached: true,
-			});
-		} catch {
-			// Ignore errors if taskkill fails
-		}
-	} else {
-		// Use SIGKILL on Unix/Linux/Mac
-		try {
-			process.kill(-pid, "SIGKILL");
-		} catch {
-			// Fallback to killing just the child if process group kill fails
-			try {
-				process.kill(pid, "SIGKILL");
-			} catch {
-				// Process already dead
-			}
-		}
-	}
+export function killProcessTree(pid: number): boolean {
+	return signalProcessTree(pid, "SIGKILL");
 }

@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { Writable } from "node:stream";
+import { finished } from "node:stream/promises";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Container, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { spawn } from "child_process";
@@ -8,18 +10,29 @@ import { truncateToVisualLines } from "../../modes/interactive/components/visual
 import { theme } from "../../modes/interactive/theme/theme.js";
 import { waitForChildProcess } from "../../utils/child-process.js";
 import {
+	getDirectWindowsBashPath,
 	getShellConfig,
 	getShellEnv,
 	killProcessTree,
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.js";
+import { assignProcessToWindowsDaemonWorkerJob, hasWindowsDaemonWorkerJob } from "../../utils/windows-job-object.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
 import { previewBashCommand } from "./code-preview.js";
 import { OutputAccumulator } from "./output-accumulator.js";
 import { getTextOutput, invalidArgText, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult } from "./truncate.js";
+
+const WINDOWS_JOB_CLEANUP_TIMEOUT_MS = 5000;
+const WINDOWS_JOB_STARTUP_GATE_COMMIT = "start\n";
+const WINDOWS_JOB_GATED_COMMAND = `IFS= read -r _ || exit 125
+exec "$1" -c "$2"`;
+
+function withoutBashStartupEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+	return Object.fromEntries(Object.entries(environment).filter(([key]) => key.toUpperCase() !== "BASH_ENV"));
+}
 
 const bashSchema = Type.Object({
 	command: Type.String({ description: "Bash command to execute" }),
@@ -67,25 +80,56 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 	return {
 		exec: (command, cwd, { onData, signal, timeout, env }) => {
 			return new Promise((resolve, reject) => {
-				const { shell, args } = getShellConfig(options?.shellPath);
+				if (signal?.aborted) {
+					reject(new Error("aborted"));
+					return;
+				}
+				const { shell: configuredShell, args } = getShellConfig(options?.shellPath);
 				if (!existsSync(cwd)) {
 					reject(new Error(`Working directory does not exist: ${cwd}\nCannot execute bash commands.`));
 					return;
 				}
-				const child = spawn(shell, [...args, command], {
-					cwd,
-					detached: process.platform !== "win32",
-					env: env ?? getShellEnv(),
-					stdio: ["ignore", "pipe", "pipe"],
+				const useWindowsJob = hasWindowsDaemonWorkerJob();
+				const shell = useWindowsJob ? getDirectWindowsBashPath(configuredShell) : configuredShell;
+				const environment = env ?? getShellEnv();
+				const childEnvironment = useWindowsJob ? withoutBashStartupEnvironment(environment) : environment;
+				const child = spawn(
+					shell,
+					useWindowsJob
+						? [...args, WINDOWS_JOB_GATED_COMMAND, "prime-agent-job-gate", shell, command]
+						: [...args, command],
+					{
+						windowsHide: true,
+						cwd,
+						detached: process.platform !== "win32",
+						env: childEnvironment,
+						stdio: useWindowsJob ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"],
+					},
+				);
+				const childExit = waitForChildProcess(child);
+				const terminationErrors: unknown[] = [];
+				let rejectStop!: (reason: Error) => void;
+				const stop = new Promise<never>((_, rejectStopped) => {
+					rejectStop = rejectStopped;
 				});
-				if (child.pid) trackDetachedChildPid(child.pid);
+				const childCompletion = Promise.race([childExit, stop]);
+				let terminationAttempted = false;
+				const terminateChildTree = (reason: string) => {
+					terminationAttempted = true;
+					if (child.pid && child.exitCode === null && child.signalCode === null && !killProcessTree(child.pid)) {
+						terminationErrors.push(new Error(`Could not terminate Bash process tree after ${reason}`));
+					}
+				};
+				let tracked = false;
+				let safeToUntrack = false;
 				let timedOut = false;
 				let timeoutHandle: NodeJS.Timeout | undefined;
 				// Set timeout if provided.
 				if (timeout !== undefined && timeout > 0) {
 					timeoutHandle = setTimeout(() => {
 						timedOut = true;
-						if (child.pid) killProcessTree(child.pid);
+						terminateChildTree("timeout");
+						rejectStop(new Error(`timeout:${timeout}`));
 					}, timeout * 1000);
 				}
 				// Stream stdout and stderr.
@@ -93,35 +137,89 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 				child.stderr?.on("data", onData);
 				// Handle abort signal by killing the entire process tree.
 				const onAbort = () => {
-					if (child.pid) killProcessTree(child.pid);
+					terminateChildTree("abort");
+					rejectStop(new Error("aborted"));
 				};
 				if (signal) {
 					if (signal.aborted) onAbort();
 					else signal.addEventListener("abort", onAbort, { once: true });
 				}
-				// Handle shell spawn errors and wait for the process to terminate without hanging
-				// on inherited stdio handles held by detached descendants.
-				waitForChildProcess(child)
-					.then((code) => {
-						if (child.pid) untrackDetachedChildPid(child.pid);
-						if (timeoutHandle) clearTimeout(timeoutHandle);
-						if (signal) signal.removeEventListener("abort", onAbort);
-						if (signal?.aborted) {
-							reject(new Error("aborted"));
-							return;
+
+				const run = async () => {
+					try {
+						if (child.pid && !useWindowsJob) {
+							trackDetachedChildPid(child.pid);
+							tracked = true;
 						}
-						if (timedOut) {
-							reject(new Error(`timeout:${timeout}`));
-							return;
+						if (signal?.aborted) throw new Error("aborted");
+						if (useWindowsJob) {
+							if (!child.pid) throw new Error("Failed to obtain gated Bash process id");
+							const startupGate = child.stdin;
+							if (!(startupGate instanceof Writable))
+								throw new Error("Failed to create gated Bash startup pipe");
+							assignProcessToWindowsDaemonWorkerJob(child.pid);
+							trackDetachedChildPid(child.pid);
+							tracked = true;
+							startupGate.end(WINDOWS_JOB_STARTUP_GATE_COMMIT);
+							await finished(startupGate);
 						}
+						const code = await childCompletion;
+						safeToUntrack = true;
+						if (signal?.aborted) throw new Error("aborted");
+						if (timedOut) throw new Error(`timeout:${timeout}`);
 						resolve({ exitCode: code });
-					})
-					.catch((err) => {
-						if (child.pid) untrackDetachedChildPid(child.pid);
+					} catch (error) {
+						if (
+							child.exitCode === null &&
+							child.signalCode === null &&
+							(!terminationAttempted || terminationErrors.length > 0)
+						) {
+							terminateChildTree("failed startup or execution");
+						}
+						const cleanupErrors: unknown[] = [...terminationErrors];
+						let cleanupTimer: NodeJS.Timeout | undefined;
+						try {
+							await Promise.race([
+								childExit,
+								new Promise<never>((_, rejectCleanup) => {
+									cleanupTimer = setTimeout(
+										() => rejectCleanup(new Error("Timed out terminating failed gated Bash process")),
+										WINDOWS_JOB_CLEANUP_TIMEOUT_MS,
+									);
+								}),
+							]);
+						} catch (cleanupError) {
+							if (cleanupError !== error) cleanupErrors.push(cleanupError);
+						} finally {
+							if (cleanupTimer) clearTimeout(cleanupTimer);
+						}
+						safeToUntrack = cleanupErrors.length === 0 && (child.exitCode !== null || child.signalCode !== null);
+						const failure = signal?.aborted
+							? new Error("aborted")
+							: timedOut
+								? new Error(`timeout:${timeout}`)
+								: error;
+						const failureMessage = failure instanceof Error ? failure.message : String(failure);
+						const cleanupMessage = cleanupErrors
+							.map((cleanupError) =>
+								cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+							)
+							.join("; ");
+						reject(
+							cleanupErrors.length > 0
+								? new AggregateError(
+										[failure, ...cleanupErrors],
+										`${failureMessage}; Bash process-tree cleanup failed: ${cleanupMessage}`,
+									)
+								: failure,
+						);
+					} finally {
+						if (tracked && child.pid && safeToUntrack) untrackDetachedChildPid(child.pid);
 						if (timeoutHandle) clearTimeout(timeoutHandle);
 						if (signal) signal.removeEventListener("abort", onAbort);
-						reject(err);
-					});
+					}
+				};
+				void run();
 			});
 		},
 	};

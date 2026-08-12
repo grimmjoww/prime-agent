@@ -190,20 +190,24 @@ Content`,
 
 				mkdirSync(join(agentDir), { recursive: true });
 				mkdirSync(join(tempDir, ".prime", "agent"), { recursive: true });
-				symlinkSync(sharedExtensionsDir, join(agentDir, "extensions"), "dir");
-				symlinkSync(sharedSkillsDir, join(agentDir, "skills"), "dir");
-				symlinkSync(sharedPromptsDir, join(agentDir, "prompts"), "dir");
-				symlinkSync(sharedThemesDir, join(agentDir, "themes"), "dir");
-				symlinkSync(sharedExtensionsDir, join(tempDir, ".prime", "agent", "extensions"), "dir");
-				symlinkSync(sharedSkillsDir, join(tempDir, ".prime", "agent", "skills"), "dir");
-				symlinkSync(sharedPromptsDir, join(tempDir, ".prime", "agent", "prompts"), "dir");
-				symlinkSync(sharedThemesDir, join(tempDir, ".prime", "agent", "themes"), "dir");
+				const linkType = process.platform === "win32" ? "junction" : "dir";
+				symlinkSync(sharedExtensionsDir, join(agentDir, "extensions"), linkType);
+				symlinkSync(sharedSkillsDir, join(agentDir, "skills"), linkType);
+				symlinkSync(sharedPromptsDir, join(agentDir, "prompts"), linkType);
+				symlinkSync(sharedThemesDir, join(agentDir, "themes"), linkType);
+				symlinkSync(sharedExtensionsDir, join(tempDir, ".prime", "agent", "extensions"), linkType);
+				symlinkSync(sharedSkillsDir, join(tempDir, ".prime", "agent", "skills"), linkType);
+				symlinkSync(sharedPromptsDir, join(tempDir, ".prime", "agent", "prompts"), linkType);
+				symlinkSync(sharedThemesDir, join(tempDir, ".prime", "agent", "themes"), linkType);
 
 				const result = await packageManager.resolve();
+				const sharedSkills = result.skills.filter((resource) =>
+					pathEndsWith(resource.path, join("shared-skill", "SKILL.md")),
+				);
 
 				expect({
 					extensions: result.extensions.length,
-					skills: result.skills.length,
+					skills: sharedSkills.length,
 					prompts: result.prompts.length,
 					themes: result.themes.length,
 				}).toEqual({
@@ -216,7 +220,7 @@ Content`,
 				// Project auto-discovered has higher precedence than user auto-discovered,
 				// so the surviving entry should be scoped to project.
 				expect(result.extensions[0].metadata.scope).toBe("project");
-				expect(result.skills[0].metadata.scope).toBe("project");
+				expect(sharedSkills[0]?.metadata.scope).toBe("project");
 				expect(result.prompts[0].metadata.scope).toBe("project");
 				expect(result.themes[0].metadata.scope).toBe("project");
 			} finally {

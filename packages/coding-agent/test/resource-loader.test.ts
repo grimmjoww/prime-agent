@@ -179,8 +179,9 @@ Project skill`,
 
 			mkdirSync(agentDir, { recursive: true });
 			mkdirSync(join(cwd, ".prime", "agent"), { recursive: true });
-			symlinkSync(sharedExtDir, join(agentDir, "extensions"), "dir");
-			symlinkSync(sharedExtDir, join(cwd, ".prime", "agent", "extensions"), "dir");
+			const linkType = process.platform === "win32" ? "junction" : "dir";
+			symlinkSync(sharedExtDir, join(agentDir, "extensions"), linkType);
+			symlinkSync(sharedExtDir, join(cwd, ".prime", "agent", "extensions"), linkType);
 
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();

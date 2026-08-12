@@ -113,7 +113,7 @@ describe("edit summaries", () => {
 			const file = join(realCwd, "same.ts");
 			mkdirSync(realCwd);
 			writeFileSync(file, "old");
-			symlinkSync(realCwd, linkedCwd, "dir");
+			symlinkSync(realCwd, linkedCwd, process.platform === "win32" ? "junction" : "dir");
 
 			const message = assistant([
 				{ type: "toolCall", id: "one", name: "ipython", arguments: {} },

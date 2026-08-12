@@ -51,7 +51,13 @@ Install the latest stable release on macOS or Linux:
 curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh
 ```
 
-The installer downloads a versioned release, verifies its SHA-256 checksum, installs the `prime-agent` command, and can prepare the IPython runtime used by the agent.
+On Windows x64, install x64 Node.js 22.8.0 or newer and Git for Windows, then run in PowerShell:
+
+```powershell
+irm https://app.primeintellect.ai/prime-agent/install.ps1 | iex
+```
+
+The installers download a versioned release, verify its SHA-256 checksum, install the `prime-agent` command, and can prepare the IPython runtime used by the agent.
 
 Start Prime Agent from the repository or directory you want it to work in:
 
