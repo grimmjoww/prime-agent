@@ -248,123 +248,121 @@ async function waitForProcessGone(pid: number, processStartId?: string): Promise
 describe.skipIf(process.platform !== "win32")(
 	"regression #917: Windows daemon recovery reaps orphaned process trees",
 	() => {
-		it(
-			"terminates a journaled orphan tree that was never assigned to the worker's Job Object",
-			{ timeout: 90_000 },
-			async () => {
-				const root = tempDir();
-				const agentDir = join(root, "agent");
-				const projectDir = join(root, "project");
-				const sessionDir = join(agentDir, "sessions");
-				const socketPath = testSocketPath("prime-917-orphans");
-				mkdirSync(projectDir, { recursive: true });
+		it("terminates a journaled orphan tree that was never assigned to the worker's Job Object", {
+			timeout: 90_000,
+		}, async () => {
+			const root = tempDir();
+			const agentDir = join(root, "agent");
+			const projectDir = join(root, "project");
+			const sessionDir = join(agentDir, "sessions");
+			const socketPath = testSocketPath("prime-917-orphans");
+			mkdirSync(projectDir, { recursive: true });
 
-				const sessionManager = SessionManager.create(projectDir, sessionDir);
-				sessionManager.appendMessage({ role: "user", content: "917 fixture", timestamp: 1 });
-				sessionManager.flushNow();
-				const sessionFile = sessionManager.getSessionFile();
-				if (!sessionFile) {
-					throw new Error("Fixture session did not persist");
+			const sessionManager = SessionManager.create(projectDir, sessionDir);
+			sessionManager.appendMessage({ role: "user", content: "917 fixture", timestamp: 1 });
+			sessionManager.flushNow();
+			const sessionFile = sessionManager.getSessionFile();
+			if (!sessionFile) {
+				throw new Error("Fixture session did not persist");
+			}
+
+			const supervisor = spawnSupervisor(agentDir, socketPath, projectDir);
+			const client = await connectEventually(socketPath, supervisor);
+			try {
+				const created = await client.request({
+					type: "create",
+					sessionPath: sessionFile,
+					config: {
+						cwd: projectDir,
+						agentDir,
+						sessionDir,
+						noTools: true,
+						noExtensions: true,
+					},
+				});
+				if (!created.success) {
+					throw new Error(`${created.error}\n${readDaemonLogs(agentDir)}`);
+				}
+				const createdSummary = requireSummary(created.data);
+				expect(createdSummary.workerState).toBe("ready");
+				const workerPid = createdSummary.workerPid;
+				if (!workerPid) {
+					throw new Error("Resident worker did not expose its pid");
+				}
+				workerPids.add(workerPid);
+
+				const descriptor = readWorkerDescriptor(agentDir);
+				if (!descriptor.orphanProcessJournalPath) {
+					throw new Error("Resident worker did not persist its orphan-process journal path");
 				}
 
-				const supervisor = spawnSupervisor(agentDir, socketPath, projectDir);
-				const client = await connectEventually(socketPath, supervisor);
-				try {
-					const created = await client.request({
-						type: "create",
-						sessionPath: sessionFile,
-						config: {
-							cwd: projectDir,
-							agentDir,
-							sessionDir,
-							noTools: true,
-							noExtensions: true,
-						},
-					});
-					if (!created.success) {
-						throw new Error(`${created.error}\n${readDaemonLogs(agentDir)}`);
-					}
-					const createdSummary = requireSummary(created.data);
-					expect(createdSummary.workerState).toBe("ready");
-					const workerPid = createdSummary.workerPid;
-					if (!workerPid) {
-						throw new Error("Resident worker did not expose its pid");
-					}
-					workerPids.add(workerPid);
+				// Plant the #917 orphan class: a live process that is journaled as the
+				// worker's orphan but was never assigned to the worker's Job Object.
+				// Autonomous-spawned children take exactly this path, so killing the
+				// worker cannot take this process down with it.
+				const markerPath = join(root, "orphan-917.json");
+				const orphan = spawn(process.execPath, [blockingProcessTreePath, markerPath], { stdio: "ignore" });
+				children.add(orphan);
+				if (!orphan.pid) {
+					throw new Error("Orphan fixture did not expose a pid");
+				}
+				const orphanPid = orphan.pid;
+				await waitForCondition(() => existsSync(markerPath), "Orphan fixture did not become ready");
+				const orphanStartId = getProcessStartId(orphanPid);
+				if (!orphanStartId) {
+					throw new Error("Orphan fixture did not expose a process start id");
+				}
+				appendFileSync(
+					descriptor.orphanProcessJournalPath,
+					`${JSON.stringify({
+						version: 1,
+						pid: orphanPid,
+						ownerPid: workerPid,
+						processStartId: orphanStartId,
+						active: true,
+						recordedAt: new Date().toISOString(),
+					})}\n`,
+				);
 
-					const descriptor = readWorkerDescriptor(agentDir);
-					if (!descriptor.orphanProcessJournalPath) {
-						throw new Error("Resident worker did not persist its orphan-process journal path");
-					}
+				process.kill(workerPid, "SIGKILL");
+				await waitForProcessGone(workerPid);
+				workerPids.delete(workerPid);
+				if (!isProcessIdentityAlive(orphanPid, orphanStartId)) {
+					throw new Error("Orphan fixture died with the worker; the #917 precondition requires it to survive");
+				}
 
-					// Plant the #917 orphan class: a live process that is journaled as the
-					// worker's orphan but was never assigned to the worker's Job Object.
-					// Autonomous-spawned children take exactly this path, so killing the
-					// worker cannot take this process down with it.
-					const markerPath = join(root, "orphan-917.json");
-					const orphan = spawn(process.execPath, [blockingProcessTreePath, markerPath], { stdio: "ignore" });
-					children.add(orphan);
-					if (!orphan.pid) {
-						throw new Error("Orphan fixture did not expose a pid");
-					}
-					const orphanPid = orphan.pid;
-					await waitForCondition(() => existsSync(markerPath), "Orphan fixture did not become ready");
-					const orphanStartId = getProcessStartId(orphanPid);
-					if (!orphanStartId) {
-						throw new Error("Orphan fixture did not expose a process start id");
-					}
-					appendFileSync(
-						descriptor.orphanProcessJournalPath,
-						`${JSON.stringify({
-							version: 1,
-							pid: orphanPid,
-							ownerPid: workerPid,
-							processStartId: orphanStartId,
-							active: true,
-							recordedAt: new Date().toISOString(),
-						})}\n`,
-					);
-
-					process.kill(workerPid, "SIGKILL");
-					await waitForProcessGone(workerPid);
-					workerPids.delete(workerPid);
-					if (!isProcessIdentityAlive(orphanPid, orphanStartId)) {
-						throw new Error("Orphan fixture died with the worker; the #917 precondition requires it to survive");
-					}
-
-					const activeSessionId = createdSummary.activeSessionId ?? createdSummary.id;
-					let recovered: SessionSummary | undefined;
-					const recoveryDeadline = Date.now() + 30_000;
-					while (Date.now() < recoveryDeadline) {
-						const response = await client.request({ type: "list" });
-						if (response.success) {
-							recovered = requireSessionList(response.data).find(
-								(summary) => (summary.activeSessionId ?? summary.id) === activeSessionId,
-							);
-							if (recovered?.workerState === "ready" && recovered.workerPid !== workerPid) {
-								break;
-							}
-						}
-						await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
-					}
-
-					try {
-						await waitForCondition(
-							() => !isProcessIdentityAlive(orphanPid, orphanStartId),
-							`Orphaned process tree ${orphanPid} survived worker recovery`,
-							10_000,
+				const activeSessionId = createdSummary.activeSessionId ?? createdSummary.id;
+				let recovered: SessionSummary | undefined;
+				const recoveryDeadline = Date.now() + 30_000;
+				while (Date.now() < recoveryDeadline) {
+					const response = await client.request({ type: "list" });
+					if (response.success) {
+						recovered = requireSessionList(response.data).find(
+							(summary) => (summary.activeSessionId ?? summary.id) === activeSessionId,
 						);
-					} catch (error) {
-						throw new Error(`${String(error)}\n${readDaemonLogs(agentDir)}`);
+						if (recovered?.workerState === "ready" && recovered.workerPid !== workerPid) {
+							break;
+						}
 					}
-					expect(recovered?.workerState).toBe("ready");
-					if (recovered?.workerPid) {
-						workerPids.add(recovered.workerPid);
-					}
-				} finally {
-					client.close();
+					await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
 				}
-			},
-		);
+
+				try {
+					await waitForCondition(
+						() => !isProcessIdentityAlive(orphanPid, orphanStartId),
+						`Orphaned process tree ${orphanPid} survived worker recovery`,
+						10_000,
+					);
+				} catch (error) {
+					throw new Error(`${String(error)}\n${readDaemonLogs(agentDir)}`);
+				}
+				expect(recovered?.workerState).toBe("ready");
+				if (recovered?.workerPid) {
+					workerPids.add(recovered.workerPid);
+				}
+			} finally {
+				client.close();
+			}
+		});
 	},
 );

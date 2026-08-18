@@ -59,5 +59,12 @@
 			"rimraf": "6.1.2"
 		},
 		"shell-quote": "^1.10.0"
+	},
+	"allowScripts": {
+		"esbuild@0.28.1": true,
+		"koffi": true,
+		"zeromq@6.5.0": true,
+		"protobufjs@7.6.4": true,
+		"canvas": true
 	}
 }

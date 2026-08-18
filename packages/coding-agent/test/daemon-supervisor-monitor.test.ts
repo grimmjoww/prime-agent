@@ -989,7 +989,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const exit = vi.spyOn(process, "exit").mockImplementation(((code?: string | number | null) => {
 			throw new Error(`exit ${code}`);
 		}) as typeof process.exit);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
 		const catalogStop = vi.fn(async () => undefined);
@@ -1869,7 +1869,7 @@ describe("daemon worker supervisor monitoring", () => {
 		}) as {
 			adoptOrRecoverWorker(target: object): Promise<void>;
 		};
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		try {
 			await supervisor.adoptOrRecoverWorker(worker);
 
@@ -2029,6 +2029,7 @@ describe("daemon worker supervisor monitoring", () => {
 			if (signal === "SIGKILL") {
 				alive = false;
 			}
+			return true;
 		});
 		try {
 			supervisor.scheduleWorkerStopFinalization(worker);
@@ -2071,7 +2072,7 @@ describe("daemon worker supervisor monitoring", () => {
 		};
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		try {
 			supervisor.scheduleWorkerStopFinalization(worker);
 			const finalization = worker.stopFinalization;
@@ -2128,7 +2129,7 @@ describe("daemon worker supervisor monitoring", () => {
 		// The pid is alive, but it now belongs to an unrelated process.
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		const startIdSpy = vi.spyOn(sessionLeaseModule, "getProcessStartId").mockReturnValue("proc:recycled");
 		try {
 			supervisor.scheduleWorkerStopFinalization(worker);
@@ -2299,7 +2300,7 @@ describe("daemon worker supervisor monitoring", () => {
 		};
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		try {
 			const stopping = supervisor.stopWorker(worker, true, true).then(
 				() => undefined,
@@ -2351,7 +2352,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		// The worker is current on the throttled polls, but the pid is recycled
 		// by the time the SIGKILL deadline arrives.
 		const startIdSpy = vi.spyOn(sessionLeaseModule, "getProcessStartId").mockReturnValue("proc:original");
@@ -2408,6 +2409,7 @@ describe("daemon worker supervisor monitoring", () => {
 			if (signal === "SIGKILL") {
 				alive = false;
 			}
+			return true;
 		});
 		// Identity observation is down when the SIGKILL deadline passes...
 		const startIdSpy = vi.spyOn(sessionLeaseModule, "getProcessStartId").mockReturnValue(undefined);
@@ -2461,7 +2463,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		// Identity observation fails transiently (e.g. ps unavailable).
 		const startIdSpy = vi.spyOn(sessionLeaseModule, "getProcessStartId").mockReturnValue(undefined);
 		try {
@@ -2509,7 +2511,7 @@ describe("daemon worker supervisor monitoring", () => {
 		const sessionLeaseModule = await import("../src/core/session-lease.js");
 		const existsSpy = vi.spyOn(childProcessModule, "processIdExists").mockReturnValue(true);
 		const aliveSpy = vi.spyOn(childProcessModule, "isProcessAlive").mockReturnValue(true);
-		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => {});
+		const killSpy = vi.spyOn(childProcessModule, "signalProcessGroupOrProcess").mockImplementation(() => true);
 		const startIdSpy = vi.spyOn(sessionLeaseModule, "getProcessStartId").mockReturnValue("proc:unrelated");
 		try {
 			supervisor.scheduleWorkerStopFinalization(worker);

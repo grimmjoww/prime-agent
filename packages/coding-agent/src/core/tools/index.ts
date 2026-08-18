@@ -44,6 +44,7 @@ import { createIpythonToolDefinition, type IpythonToolOptions } from "./ipython.
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
 export type ToolName = "ipython";
+export const allToolNames: Set<ToolName> = new Set(["ipython"]);
 
 export interface ToolsOptions {
 	ipython?: IpythonToolOptions;
