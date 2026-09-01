@@ -7,6 +7,7 @@ import { findGitPaths, type GitPaths } from "../utils/git.js";
 /** Ask git for the current branch. Returns null on detached HEAD or if git is unavailable. */
 function resolveBranchWithGitSync(repoDir: string): string | null {
 	const result = spawnSync("git", ["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"], {
+		windowsHide: true,
 		cwd: repoDir,
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "ignore"],
@@ -22,6 +23,7 @@ function resolveBranchWithGitAsync(repoDir: string): Promise<string | null> {
 			"git",
 			["--no-optional-locks", "symbolic-ref", "--quiet", "--short", "HEAD"],
 			{
+				windowsHide: true,
 				cwd: repoDir,
 				encoding: "utf8",
 			},

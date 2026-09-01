@@ -67,6 +67,7 @@ export async function checkTmuxKeyboardSetup(): Promise<string | undefined> {
 	const runTmuxShow = (option: string): Promise<string | undefined> => {
 		return new Promise((resolve) => {
 			const proc = spawn("tmux", ["show", "-gv", option], {
+				windowsHide: true,
 				stdio: ["ignore", "pipe", "ignore"],
 			});
 			let stdout = "";

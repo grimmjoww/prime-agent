@@ -6,6 +6,7 @@ import { clipboard } from "./clipboard-native.js";
 type NativeClipboardExecOptions = {
 	input: string;
 	timeout: number;
+	windowsHide: boolean;
 	stdio: ["pipe", "ignore", "ignore"];
 };
 
@@ -61,7 +62,12 @@ export async function copyToClipboard(text: string): Promise<void> {
 		return;
 	}
 
-	const options: NativeClipboardExecOptions = { input: text, timeout: 5000, stdio: ["pipe", "ignore", "ignore"] };
+	const options: NativeClipboardExecOptions = {
+		input: text,
+		timeout: 5000,
+		windowsHide: true,
+		stdio: ["pipe", "ignore", "ignore"],
+	};
 
 	if (!copied) {
 		try {
@@ -89,9 +95,9 @@ export async function copyToClipboard(text: string): Promise<void> {
 					if (isWayland && hasWaylandDisplay) {
 						try {
 							// Verify wl-copy exists (spawn errors are async and won't be caught)
-							execSync("which wl-copy", { stdio: "ignore" });
+							execSync("which wl-copy", { windowsHide: true, stdio: "ignore" });
 							// wl-copy with execSync hangs due to fork behavior; use spawn instead
-							const proc = spawn("wl-copy", [], { stdio: ["pipe", "ignore", "ignore"] });
+							const proc = spawn("wl-copy", [], { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] });
 							proc.stdin.on("error", () => {
 								// Ignore EPIPE errors if wl-copy exits early
 							});

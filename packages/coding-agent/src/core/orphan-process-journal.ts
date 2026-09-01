@@ -154,6 +154,7 @@ export function killOrphanProcess(pid: number): boolean {
 			win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
 			["/F", "/T", "/PID", String(pid)],
 			{
+				windowsHide: true,
 				stdio: "ignore",
 				timeout: 10_000,
 				env: { ...process.env, NoDefaultCurrentDirectoryInExePath: "1" },

@@ -208,6 +208,7 @@ function readCommandOutput(
 	options: { requireSuccess?: boolean } = {},
 ): string | undefined {
 	const result = spawnSync(command, args, {
+		windowsHide: true,
 		encoding: "utf-8",
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: shouldUseWindowsShell(command),

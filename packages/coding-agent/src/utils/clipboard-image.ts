@@ -80,6 +80,7 @@ function runCommand(
 	const maxBufferBytes = options?.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES;
 
 	const result = spawnSync(command, args, {
+		windowsHide: true,
 		timeout: timeoutMs,
 		maxBuffer: maxBufferBytes,
 		env: options?.env,

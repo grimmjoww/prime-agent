@@ -104,6 +104,7 @@ export class RpcClient {
 		}
 
 		this.process = spawn("node", [cliPath, ...args], {
+			windowsHide: true,
 			cwd: this.options.cwd,
 			env: { ...process.env, ...this.options.env },
 			stdio: ["pipe", "pipe", "pipe"],

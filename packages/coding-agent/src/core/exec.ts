@@ -59,6 +59,7 @@ export async function execCommand(
 ): Promise<ExecResult> {
 	return new Promise((resolve) => {
 		const proc = spawn(command, args, {
+			windowsHide: true,
 			cwd,
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],

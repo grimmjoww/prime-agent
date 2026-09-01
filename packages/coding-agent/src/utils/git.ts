@@ -250,6 +250,7 @@ export function gitContextsEqual(a: GitContext, b: GitContext): boolean {
 
 function runGit(cwd: string, args: string[]): string | null {
 	const result = spawnSync("git", ["--no-optional-locks", ...args], {
+		windowsHide: true,
 		cwd,
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "ignore"],

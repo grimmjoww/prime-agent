@@ -360,6 +360,7 @@ export class DaemonCatalogClient {
 			environment = createCliSubprocessEnv(environment, catalogEntry, execArgs);
 		}
 		const child = spawn(command, args, {
+			windowsHide: true,
 			cwd: process.cwd(),
 			env: environment,
 			stdio: ["ignore", "ignore", "ignore", "ipc"],

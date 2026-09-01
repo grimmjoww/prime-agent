@@ -73,6 +73,7 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 					return;
 				}
 				const child = spawn(shell, [...args, command], {
+					windowsHide: true,
 					cwd,
 					detached: process.platform !== "win32",
 					env: env ?? getShellEnv(),

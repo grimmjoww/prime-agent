@@ -250,6 +250,7 @@ export class ReplKernelManager {
 		}
 
 		const child = spawn(python, ["-m", "rlm.repl"], {
+			windowsHide: true,
 			cwd: this.options.cwd,
 			// bash.py journals its process groups under this pid so the host can
 			// reap them if the runtime dies without running its shutdown hook.

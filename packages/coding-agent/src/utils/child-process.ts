@@ -39,7 +39,10 @@ export function isZombieProcess(pid: number): boolean {
 		// Fall through to the portable process listing used on macOS and BSD.
 	}
 	try {
-		const state = execFileSync("ps", ["-p", String(pid), "-o", "stat="], { encoding: "utf8" }).trim();
+		const state = execFileSync("ps", ["-p", String(pid), "-o", "stat="], {
+			windowsHide: true,
+			encoding: "utf8",
+		}).trim();
 		return state.startsWith("Z");
 	} catch {
 		return false;

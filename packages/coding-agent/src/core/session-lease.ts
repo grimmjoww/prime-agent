@@ -114,6 +114,7 @@ type ProcessQuery = (command: string, args: string[]) => string;
 
 function runProcessQuery(command: string, args: string[]): string {
 	return execFileSync(command, args, {
+		windowsHide: true,
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "ignore"],
 	});

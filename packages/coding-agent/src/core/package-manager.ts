@@ -2348,6 +2348,7 @@ export class DefaultPackageManager implements PackageManager {
 
 	private spawnCommand(command: string, args: string[], options?: { cwd?: string }): ChildProcess {
 		return spawn(command, args, {
+			windowsHide: true,
 			cwd: options?.cwd,
 			stdio: isStdoutTakenOver() ? ["ignore", 2, 2] : "inherit",
 			shell: shouldUseWindowsShell(command),
@@ -2362,6 +2363,7 @@ export class DefaultPackageManager implements PackageManager {
 	): ChildProcessByStdio<null, Readable, Readable> {
 		const baseEnv = getEnv();
 		return spawn(command, args, {
+			windowsHide: true,
 			cwd: options?.cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 			shell: shouldUseWindowsShell(command),
@@ -2429,6 +2431,7 @@ export class DefaultPackageManager implements PackageManager {
 
 	private runCommandSync(command: string, args: string[]): string {
 		const result = spawnSync(command, args, {
+			windowsHide: true,
 			stdio: ["ignore", "pipe", "pipe"],
 			encoding: "utf-8",
 			shell: shouldUseWindowsShell(command),

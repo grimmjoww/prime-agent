@@ -62,6 +62,7 @@ function executeWithConfiguredShell(command: string): { executed: boolean; value
 function executeWithDefaultShell(command: string): string | undefined {
 	try {
 		const output = execSync(command, {
+			windowsHide: true,
 			encoding: "utf-8",
 			timeout: 10000,
 			stdio: ["ignore", "pipe", "ignore"],

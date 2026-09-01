@@ -7427,6 +7427,7 @@ export class InteractiveMode {
 
 			// Spawn editor synchronously with inherited stdio for interactive editing
 			const result = spawnSync(editor, [...editorArgs, tmpFile], {
+				windowsHide: true,
 				stdio: "inherit",
 				shell: process.platform === "win32",
 			});
@@ -8807,6 +8808,7 @@ export class InteractiveMode {
 			process.execPath,
 			[...process.execArgv, entrypoint, "update", ...updateChildArgs],
 			{
+				windowsHide: true,
 				stdio: "inherit",
 				cwd: updateCwd,
 				env: updateEnv,
@@ -8879,6 +8881,7 @@ export class InteractiveMode {
 				);
 			}
 			const relaunchResult = spawnSync(relaunch.command, relaunch.args, {
+				windowsHide: true,
 				stdio: "inherit",
 				cwd: updateCwd,
 				env: process.env,
@@ -9097,7 +9100,7 @@ export class InteractiveMode {
 	private async handleShareCommand(): Promise<void> {
 		// Check if gh is available and logged in
 		try {
-			const authResult = spawnSync("gh", ["auth", "status"], { encoding: "utf-8" });
+			const authResult = spawnSync("gh", ["auth", "status"], { windowsHide: true, encoding: "utf-8" });
 			if (authResult.status !== 0) {
 				this.showError("GitHub CLI is not logged in. Run 'gh auth login' first.");
 				return;
@@ -9146,7 +9149,7 @@ export class InteractiveMode {
 
 		try {
 			const result = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve) => {
-				proc = spawn("gh", ["gist", "create", "--public=false", tmpFile]);
+				proc = spawn("gh", ["gist", "create", "--public=false", tmpFile], { windowsHide: true });
 				let stdout = "";
 				let stderr = "";
 				proc.stdout?.on("data", (data) => {
